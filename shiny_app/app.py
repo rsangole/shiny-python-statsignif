@@ -103,7 +103,7 @@ app_ui = ui.page_sidebar(
     ),
     ui.br(),
     ui.HTML(
-        "<div style='text-align: center; color: gray; font-size:0.9em;'> Created using Shiny for Python | <a href = 'http://www.rsangole.com'>Rahul Sangole</a> | Dec '24</div>"
+        "<div style='text-align: center; color: gray; font-size:0.9em;'> Shiny for Python, using ShinyLive | <a href = 'https://rsangole.github.io/shiny-python-statsignif/' target='_blank'>Github Repo</a> | <a href = 'http://www.rsangole.com' target='_blank'>Rahul Sangole</a> | Dec '24</div>"
     ),
     fillable=False,
     title="Why “Statistical Significance” Is Pointless",

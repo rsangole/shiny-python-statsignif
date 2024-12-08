@@ -1,216 +1,157 @@
 from __future__ import annotations
-
-from shiny import App, reactive, render, ui, req
-from shinywidgets import render_altair
-import shinyswatch
-import shiny.experimental as x
-import pandas as pd
-from htmltools import css
-import numpy as np
-import altair as alt
 from scipy.stats import norm
-import plotly.express as px
-import plotly.graph_objects as go
-# import altair as alt    
-# alt.data_transformers.disable_max_rows()
+from shiny import App, reactive, render, ui
+from shinyswatch.theme import cosmo as shiny_theme
 from shinywidgets import output_widget, render_widget
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import shinyswatch
 
-import matplotlib.pyplot as plt
+COL_TXT = "#0081a7"
+COL_treatment = "#0081a7"
+COL_control = "#00afb9"
+COL_permutation = "#c0c0c0"
+COL_perm_highlight = "#f07167"
 
-COL_GRtreatment = "#0a9396"
-COL_GRcontrol = "#f95738"
-COL_LDA_LINE = "#ee9b00"
-COL_L1 = "#6c757d"
-COL_DIM = "#e9d8a6"
-COL_DIST = "#06d6a0"
-ALPHA_DIM = 0.4
-LINE_DIM = 0.5
-
-# https://icons.getbootstrap.com/icons/question-circle-fill/
-question_circle_fill = ui.HTML(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="gray" class="bi bi-question-circle-fill mb-1" viewBox="0 0 16 16"> \
-    <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM5.496 6.033h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286a.237.237 0 0 0 .241.247zm2.325 6.443c.61 0 1.029-.394 1.029-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94 0 .533.425.927 1.01.927z"/> \
-    </svg>'
-)
-
-
-app_ui = ui.page_fluid(
-    ui.panel_title("Why “Statistical Significance” Is Pointless"),
-    ui.br(),
-    ui.p(
-        "Article author: Samuele Mazzanti",
-        ui.br(),
-        "Article link: https://towardsdatascience.com/why-statistical-significance-is-pointless-a7644be30266"
-    ),
-    # ui.p(
-    #     "Let's see this in action.",
-    #     "Here are two groups of points. ",
-    #     "The objective is to find a line which best separates the two groups. ",
-    # ),
-    ui.row(
-        ui.column(
-            2,
-            ui.br(),
-            ui.panel_well(
-                # ui.input_select(
-                #     id="case",
-                #     label=x.ui.tooltip(
-                #         ui.span("Cases ", question_circle_fill),
-                #         ui.markdown(
-                #             "Each case here has a different distribution of points.\
-                #         These points are created using 'multivariate_normal' function from scipy.stats."
-                #         ),
-                #     ),
-                #     multiple=False,
-                #     choices={
-                #         "1": "Parallel Ellipses",
-                #         "2": "Angled Ellipses",
-                #         "3": "Circles",
-                #         "4": "Offset Ellipses",
-                #     },
-                # ),
-                ui.input_numeric(
-                    id="treatment_mean",
-                    label="Treatment Mean",
-                    value=10,
-                    min=0,
-                    max=-20,
-                    step=0.1,
-                ),
-                ui.input_numeric(
-                    id="control_mean",
-                    label="Control Mean",
-                    min=0,
-                    max=20,
-                    value=10.5,
-                    step=0.1,
-                ),
-                ui.input_numeric(
-                    id="treatment_cov",
-                    label="Treatment Std Dev",
-                    value=1,
-                    min=0,
-                    max=10,
-                    step=0.1,
-                ),
-                ui.input_numeric(
-                    id="control_cov",
-                    label="Control Std Dev",
-                    value=1,
-                    min=0,
-                    max=10,
-                    step=0.1,
-                ),
-                ui.input_slider(
-                    id="n_points",
-                    label="Points in each group",
-                    min=10,
-                    max=300,
-                    value=100,
-                    step=10,
-                ),
-                ui.input_slider(
-                    id="n_permutations",
-                    label="Permutations",
-                    min=1000,
-                    max=10000,
-                    value=10000,
-                    step=1000,
-                ),
-                ui.hr(),
-                ui.input_action_button("generate", "Generate"),
-            ),
-            ui.br(),
-            # ui.panel_well(
-            #     ui.input_slider(
-            #         "angle",
-            #         x.ui.tooltip(
-            #             ui.span("Angle of Line L ", question_circle_fill),
-            #             "The angle of the arbitrary line L",
-            #         ),
-            #         0,
-            #         180,
-            #         20,
-            #         step=1,
-            #         post="°",
-            #     ),
-            # ),
-            # ui.br(),
-            # ui.panel_well(
-            #     ui.input_checkbox("plot_proj_L1", "Projections on L", False),
-            #     ui.input_checkbox(
-            #         "plot_proj_lda",
-            #         "Projections on LDA",
-            #         False,
-            #     ),
-            # ),
+app_ui = ui.page_sidebar(
+    ui.sidebar(
+        ui.markdown(
+            "Based on Samuele Mazzanti's [Medium post](https://towardsdatascience.com/why-statistical-significance-is-pointless-a7644be30266), this app makes interactive the two ideas of statistical significance which Samuele explores."
         ),
-        ui.column(
-            10,
-            ui.row(
-                ui.column(
-                    6,
-                    output_widget(
-                        "treatment_control_hist", height="400px", width="400px"
+        ui.input_slider(
+            id="treatment_mean",
+            label="Treatment Mean",
+            min=1,
+            max=20,
+            value=10,
+            step=0.1,
+        ),
+        ui.input_slider(
+            id="control_mean",
+            label="Control Mean",
+            min=0,
+            max=20,
+            value=10.5,
+            step=0.1,
+        ),
+        ui.input_slider(
+            id="treatment_cov",
+            label="Treatment Std Dev",
+            value=2,
+            min=0,
+            max=10,
+            step=0.1,
+        ),
+        ui.input_slider(
+            id="control_cov",
+            label="Control Std Dev",
+            value=2,
+            min=0,
+            max=10,
+            step=0.1,
+        ),
+        ui.input_slider(
+            id="n_points",
+            label="Points per Group",
+            min=10,
+            max=300,
+            value=100,
+            step=10,
+        ),
+        ui.input_slider(
+            id="n_permutations",
+            label="Number of Permutations",
+            min=100,
+            max=10000,
+            value=1000,
+            step=1000,
+        ),
+        open="always",
+        bg="#f8f8f8",
+    ),
+    ui.navset_tab(
+        ui.nav_panel(
+            "P-Values",
+            ui.column(
+                10,
+                ui.row(
+                    ui.column(
+                        6,
+                        output_widget(
+                            "treatment_control_hist", height="400px", width="400px"
+                        ),
+                        ui.h5("Simulated Data"),
+                        ui.output_ui("txt_pop_dif"),
+                        ui.br(),
+                        ui.output_ui("txt_sample_dif"),
                     ),
-                    ui.output_text("txt_pop_dif"),  
-                    ui.output_text("txt_sample_dif"),  
-                    #         ui.HTML(
-                    #             f"The plot shows you two lines: an optimal separator selected by <span style='color:{COL_LDA_LINE};'>LDA</span> and an arbitrary <span style='color:{COL_L1};'>line L</span> that is not optimal."
-                    #         ),
-                    #         ui.HTML(
-                    #             f" The numbers in the four corners display the variance of each point cloud when projected on the <span style='color:{COL_LDA_LINE};'>LDA line (indicated by ▼)</span> or the arbitrary <span style='color:{COL_L1};'>line L (indicated by +)</span>. You can turn on the projections using the buttons on the left."
-                    #         ),
-                ),
-                ui.column(
-                    6,
-                    output_widget("permutation_hist", height="400px", width="400px"),
-                    ui.output_text("txt_perm"),  
-
-                    #         ui.output_plot("plot_by_angle", height="600px", width="600px"),
-                    #         ui.HTML(
-                    #             "This graph visualizes the trade-offs between intra-group variance and inter-group distance as the angle of projection changes.",
-                    #         ),
-                    #         ui.HTML(
-                    #             f"  The ideal angle - given by <span style='color:{COL_LDA_LINE};'>LDA</span> - has the best balance between <i>minimizing</i> within-group-variance and <i>maximizing</i> between-group-distance.",
-                    #         ),
+                    ui.column(
+                        6,
+                        output_widget(
+                            "permutation_hist", height="400px", width="400px"
+                        ),
+                        ui.output_data_frame("pval_df"),
+                    ),
                 ),
             ),
         ),
-    ),
-    ui.br(),
-    ui.row(
-        ui.HTML(
-            "<div style='text-align: center; color: gray; font-size:0.9em;'> Created using Shiny for Python | <a href = 'http://www.rsangole.com'>Rahul Sangole</a> | Dec '24</div>"
+        ui.nav_panel(
+            "Confidence Intervals",
+            ui.em("Coming soon!"),
         )
     ),
-
-    theme=shinyswatch.theme.cosmo,
+    ui.br(),
+    ui.HTML(
+        "<div style='text-align: center; color: gray; font-size:0.9em;'> Created using Shiny for Python | <a href = 'http://www.rsangole.com'>Rahul Sangole</a> | Dec '24</div>"
+    ),
+    fillable=False,
+    title="Why “Statistical Significance” Is Pointless",
+    theme=shiny_theme,
 )
 
 
 def server(input, output, session):
     @reactive.Calc
-    @reactive.event(input.generate, ignore_none=False)
     def treatment():
-        return norm.rvs(input.treatment_mean(), input.treatment_cov(), input.n_points())
+        return norm.rvs(
+            input.treatment_mean(),
+            input.treatment_cov(),
+            input.n_points(),
+            random_state=42,
+        )
 
     @reactive.Calc
-    @reactive.event(input.generate, ignore_none=False)
     def control():
-        return norm.rvs(input.control_mean(), input.control_cov(), input.n_points())
+        return norm.rvs(
+            input.control_mean(), 
+            input.control_cov(), 
+            input.n_points(), 
+            random_state=42
+        )
 
     @reactive.Calc
-    @reactive.event(input.generate, ignore_none=False)
+    def sample_mean_diff():
+        return np.abs(np.mean(control()) - np.mean(treatment()))
+
+    @reactive.Calc
     def permute():
         combined = np.concatenate([treatment(), control()])
         permutation_results = []
         for _ in range(input.n_permutations()):
             combined = np.random.permutation(combined)
             perm_treatment = combined[: len(treatment())]
-            perm_control = combined[-len(treatment()) :]
+            perm_control = combined[-len(control()) :]
             permutation_results.append(np.mean(perm_treatment) - np.mean(perm_control))
         return permutation_results
+
+    @reactive.Calc
+    def count_extreme():
+        return np.sum(np.array(np.abs(permute())) >= sample_mean_diff())
+
+    @reactive.Calc
+    def p_value():
+        return count_extreme() / input.n_permutations()
 
     @render_widget
     def treatment_control_hist():
@@ -218,39 +159,37 @@ def server(input, output, session):
             {"Treatment": treatment(), "Control": control()},
             index=range(len(treatment())),
         ).melt()
-        fig = (
-            px.histogram(
-                res,
-                x="value",
-                color="variable",
-                marginal="rug",
-                color_discrete_sequence=[COL_GRtreatment, COL_GRcontrol],
-                # opacity=0.75,
-            )
-            .update_layout(
-                title={"text": "", "x": 0.5},
-                yaxis_title="Count",
-                xaxis_title="Treatment, Control Values",
-                legend_title="",
-                legend=dict(
-                    orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-                ),
-                plot_bgcolor="white",
-                paper_bgcolor="white",
-            )
-        )
-        return fig
-
-    @render_widget
-    def permutation_hist():
-        res = pd.DataFrame(permute(), columns=["Permutation"]).melt()
-        mean_diff = np.mean(res["value"])
         fig = px.histogram(
             res,
             x="value",
             color="variable",
             marginal="rug",
-            color_discrete_sequence=[COL_L1],
+            nbins=60,
+            color_discrete_sequence=[COL_treatment, COL_control],
+            # opacity=0.75,
+        ).update_layout(
+            title={"text": "", "x": 0.5},
+            yaxis_title="Count",
+            xaxis_title="Treatment, Control Values",
+            legend_title="",
+            legend=dict(
+                orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+            ),
+            plot_bgcolor="white",
+            paper_bgcolor="white",
+        )
+        return fig
+
+    @render_widget
+    def permutation_hist():
+        res = pd.DataFrame(permute(), columns=["Permutation"])
+        res["Highlight"] = np.abs(res["Permutation"]) >= sample_mean_diff()
+        fig = px.histogram(
+            res,
+            x="Permutation",
+            color="Highlight",
+            marginal="rug",
+            color_discrete_sequence=[COL_permutation, COL_perm_highlight],
         ).update_layout(
             title={"text": "", "x": 0.5},
             yaxis_title="Count",
@@ -258,49 +197,100 @@ def server(input, output, session):
             legend_title="",
             plot_bgcolor="white",
             paper_bgcolor="white",
+            showlegend=False,
             legend=dict(
                 orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
             ),
         )
         fig.add_shape(
             type="line",
-            x0=mean_diff,
+            x0=sample_mean_diff(),
             y0=0,
-            x1=mean_diff,
-            y1=1,
+            x1=sample_mean_diff(),
+            y1=0.5,
             xref="x",
             yref="paper",
             line=dict(
-                # color="DarkGray",
-                width=2,
-                dash="dash",
+                width=1,
+                dash="dot",
+            ),
+        )
+        fig.add_shape(
+            type="line",
+            x0=-sample_mean_diff(),
+            y0=0,
+            x1=-sample_mean_diff(),
+            y1=0.5,
+            xref="x",
+            yref="paper",
+            line=dict(
+                width=1,
+                dash="dot",
             ),
         )
         fig.add_annotation(
-            x=mean_diff,
-            y=1,
+            x=sample_mean_diff(),
+            y=0.5,
             xref="x",
             yref="paper",
-            text=f"Mean {mean_diff:.3f}",
+            text=f"{sample_mean_diff():.3f}",
             showarrow=False,
             yshift=1,
             xanchor="left",
-            # font=dict(color="LightGray"),
+        )
+        fig.add_annotation(
+            x=-sample_mean_diff(),
+            y=0.5,
+            xref="x",
+            yref="paper",
+            text=f"-{sample_mean_diff():.3f}",
+            showarrow=False,
+            yshift=1,
+            xanchor="left",
         )
 
         return fig
-    
-    @render.text  
+
+    @render.ui
     def txt_pop_dif():
-        return f"Population Mean Difference: {input.treatment_mean() - input.control_mean():.3f}"
-    
-    @render.text  
+        return ui.HTML(
+            f"Diff Population Means: <span style='color:{COL_TXT};'>{input.control_mean()-input.treatment_mean():.3f}</span>"
+            )
+
+    @render.ui
     def txt_sample_dif():
-        return f"Sample Mean Difference: {np.mean(treatment()) - np.mean(control()):.3f}"
-    
-    @render.text  
-    def txt_perm():
-        return f"How likely is it to get a result as extreme as {np.mean(treatment()) - np.mean(control()):.3f}? To answer this, we just need to compute the percentage of experiments that had an outcome higher than {np.mean(treatment()) - np.mean(control()):.3f}"
+        return ui.HTML(
+            f"Diff Sample Means: <span style='color:{COL_TXT};'>{sample_mean_diff():.3f}</span>"
+        )
+
+    # @render.ui
+    # def txt_perm():
+    #     return ui.HTML(
+    #         f"How likely is it to get a result as extreme as <span style='color:{COL_TXT};'>{sample_mean_diff():.3f}</span>? \
+    #             <br>What % of experiments have an outcome > <span style='color:{COL_TXT};'>{sample_mean_diff():.3f}</span>?"
+    #     )
+
+    # @render.ui
+    # def txt_p_value():
+    #     return ui.HTML(
+    #         f"<b>p-value: <span style='color:{COL_TXT};'>{p_value():.3f}</span><b>"
+    #     )
+
+    @render.data_frame
+    def pval_df():
+        df = pd.DataFrame(
+            {
+                "What question are we trying to answer?": [
+                    f"What proportion of permutations have an outcome > {sample_mean_diff():.3f} or  < -{sample_mean_diff():.3f}?",
+                    f"How likely is it to get a result as extreme as {sample_mean_diff():.3f}?",
+                ],
+                "Answers": [
+                    f"{count_extreme()} out of {input.n_permutations()}",
+                    f"{p_value()*100:.2f}%, or a p-value of {p_value():.3f}",
+                ],
+            }
+        )
+        return df
 
 
 app = App(app_ui, server)
